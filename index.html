@@ -72,10 +72,16 @@
                 </div>
             </div>
 
+            <!-- 聊天区域 -->
+            <div id="chat-area" class="chat-area">
+                <!-- 聊天消息将在这里动态生成 -->
+            </div>
+
             <!-- 输入框区域 -->
             <div class="input-area">
                 <div class="input-box">
-                    <input type="text" id="prompt-input" class="prompt-input" placeholder="开启年终总结" autocomplete="off">
+                    <input type="text" id="prompt-input" class="prompt-input" placeholder="询问关于崔老师课题组的问题..."
+                        autocomplete="off">
                     <button id="submit-btn" class="submit-btn" title="发送">
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
@@ -84,7 +90,7 @@
                 </div>
 
                 <!-- 快捷提示卡片 -->
-                <div class="suggestion-cards">
+                <div id="suggestion-cards" class="suggestion-cards">
                     <div class="suggestion-card" data-prompt="为我生成一份小组2025总结">
                         <div class="card-icon">📊</div>
                         <span>为我生成一份小组2025总结</span>

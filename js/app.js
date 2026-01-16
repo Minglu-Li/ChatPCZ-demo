@@ -1,5 +1,6 @@
 /**
  * 年终总结主逻辑 - Gemini风格
+ * 支持模拟LLM对话和流式输出
  */
 
 (function () {
@@ -15,13 +16,110 @@
         slidesContainer: document.getElementById('slides-container'),
         progressFill: document.getElementById('progress-fill'),
         loadingOverlay: document.getElementById('loading-overlay'),
-        suggestionCards: document.querySelectorAll('.suggestion-card')
+        suggestionCards: document.querySelectorAll('.suggestion-card'),
+        chatArea: document.getElementById('chat-area'),
+        welcomeSection: document.querySelector('.welcome-section')
     };
 
     // 状态
     let currentSlideIndex = 0;
     let totalSlides = 0;
     let slides = [];
+    let isTyping = false; // 是否正在打字输出
+
+    // ========================================
+    // 预设的对话回复规则
+    // ========================================
+    const chatResponses = {
+        // 关键词匹配规则：包含所有关键词才触发
+        rules: [
+            {
+                keywords: ['介绍', '崔老师'],
+                response: `崔老师是河海大学的优秀教师，主要从事水利工程与人工智能交叉领域的研究工作。
+
+崔老师发表的代表性论文包括：
+• 《基于深度学习的水文预测研究》
+• 《智能水利系统设计与应用》
+• 《大数据在水资源管理中的应用》
+
+崔老师课题组的同学们研究方向涵盖：
+• 机器学习与水文模型耦合
+• 智能监测与预警系统
+• 水资源优化调度算法
+• 遥感数据处理与分析`
+            },
+            {
+                keywords: ['研究', '方向'],
+                response: `崔老师课题组的主要研究方向包括：
+
+🔬 **人工智能与水利交叉研究**
+运用机器学习、深度学习技术解决水利领域的复杂问题
+
+📊 **大数据与智慧水利**
+海量水文数据的分析处理与可视化展示
+
+🌊 **水文预报与预警**
+基于多源数据的洪水预报、干旱预警系统研发
+
+🛰️ **遥感技术应用**
+卫星遥感数据在水资源监测中的创新应用`
+            },
+            {
+                keywords: ['论文', '成果'],
+                response: `课题组近年来取得了丰硕的学术成果：
+
+📝 **发表论文**
+• SCI/EI 收录论文 20+ 篇
+• 中文核心期刊论文 30+ 篇
+
+🏆 **获奖情况**
+• 省部级科技进步奖 2 项
+• 优秀论文奖 5 项
+
+💡 **专利成果**
+• 发明专利 8 项
+• 软件著作权 15 项`
+            },
+            {
+                keywords: ['成员', '同学'],
+                response: `崔老师课题组现有成员构成：
+
+👨‍🏫 **导师团队**
+• 崔老师（组长/博导）
+• 副教授 2 名
+
+👨‍🎓 **研究生**
+• 博士研究生 5 名
+• 硕士研究生 12 名
+
+🎓 **毕业生去向**
+• 高校科研院所
+• 知名互联网企业
+• 政府水利部门`
+            },
+            {
+                keywords: ['年终', '总结'],
+                response: `点击下方的快捷卡片，即可开启2025年度总结演示！
+
+✨ 我们为您准备了：
+• 全年工作数据回顾
+• 精彩瞬间照片集锦
+• 成就与里程碑展示
+
+点击「为我生成一份小组2025总结」开始吧！`
+            }
+        ],
+        // 默认回复
+        default: `感谢您的提问！
+
+您可以尝试询问：
+• "请介绍一下崔老师"
+• "课题组的研究方向有哪些"  
+• "论文和成果情况"
+• "课题组有哪些成员"
+
+或者点击下方快捷卡片开启年终总结演示 🎉`
+    };
 
     /**
      * 初始化应用
@@ -38,8 +136,8 @@
         // 输入框回车提交
         if (elements.promptInput) {
             elements.promptInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    startSummary();
+                if (e.key === 'Enter' && !isTyping) {
+                    handleSubmit();
                 }
             });
         }
@@ -47,7 +145,9 @@
         // 提交按钮点击
         if (elements.submitBtn) {
             elements.submitBtn.addEventListener('click', () => {
-                startSummary();
+                if (!isTyping) {
+                    handleSubmit();
+                }
             });
         }
 
@@ -55,10 +155,20 @@
         elements.suggestionCards.forEach(card => {
             card.addEventListener('click', () => {
                 const prompt = card.getAttribute('data-prompt');
-                if (elements.promptInput) {
-                    elements.promptInput.value = prompt;
+                // 检查是否是年终总结相关的卡片
+                if (prompt.includes('总结') || prompt.includes('精彩瞬间') ||
+                    prompt.includes('成就数据') || prompt.includes('相册')) {
+                    if (elements.promptInput) {
+                        elements.promptInput.value = prompt;
+                    }
+                    startSummary();
+                } else {
+                    // 其他卡片触发对话
+                    if (elements.promptInput) {
+                        elements.promptInput.value = prompt;
+                    }
+                    handleSubmit();
                 }
-                startSummary();
             });
         });
 
@@ -85,6 +195,129 @@
                 }
             });
         }
+    }
+
+    /**
+     * 处理用户输入提交
+     */
+    function handleSubmit() {
+        const userInput = elements.promptInput.value.trim();
+        if (!userInput) return;
+
+        // 隐藏欢迎区域（首次对话时）
+        if (elements.welcomeSection) {
+            elements.welcomeSection.style.display = 'none';
+        }
+
+        // 添加用户消息
+        addChatMessage(userInput, 'user');
+
+        // 清空输入框
+        elements.promptInput.value = '';
+
+        // 获取回复并流式输出
+        const response = getResponse(userInput);
+        streamResponse(response);
+    }
+
+    /**
+     * 根据用户输入获取回复
+     */
+    function getResponse(input) {
+        const lowerInput = input.toLowerCase();
+
+        // 检查每条规则
+        for (const rule of chatResponses.rules) {
+            const allKeywordsMatch = rule.keywords.every(keyword =>
+                lowerInput.includes(keyword.toLowerCase())
+            );
+            if (allKeywordsMatch) {
+                return rule.response;
+            }
+        }
+
+        // 返回默认回复
+        return chatResponses.default;
+    }
+
+    /**
+     * 添加聊天消息
+     */
+    function addChatMessage(content, role) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${role}`;
+
+        const avatarContent = role === 'user' ? '👤' : '✨';
+
+        messageDiv.innerHTML = `
+            <div class="chat-avatar">${avatarContent}</div>
+            <div class="chat-bubble">${role === 'user' ? escapeHtml(content) : ''}</div>
+        `;
+
+        elements.chatArea.appendChild(messageDiv);
+        elements.chatArea.scrollTop = elements.chatArea.scrollHeight;
+
+        return messageDiv;
+    }
+
+    /**
+     * 流式输出回复
+     */
+    function streamResponse(text) {
+        isTyping = true;
+        elements.submitBtn.disabled = true;
+        elements.submitBtn.style.opacity = '0.5';
+
+        // 创建AI消息气泡
+        const messageDiv = addChatMessage('', 'assistant');
+        const bubble = messageDiv.querySelector('.chat-bubble');
+
+        // 添加打字光标
+        bubble.innerHTML = '<span class="typing-cursor"></span>';
+
+        let currentIndex = 0;
+        const typingSpeed = 30; // 每个字符的打字速度（毫秒）
+
+        function typeNextChar() {
+            if (currentIndex < text.length) {
+                const char = text[currentIndex];
+
+                // 处理换行
+                let displayChar = char;
+                if (char === '\n') {
+                    displayChar = '<br>';
+                }
+
+                // 移除光标，添加字符，再添加光标
+                const currentText = bubble.innerHTML.replace('<span class="typing-cursor"></span>', '');
+                bubble.innerHTML = currentText + displayChar + '<span class="typing-cursor"></span>';
+
+                currentIndex++;
+                elements.chatArea.scrollTop = elements.chatArea.scrollHeight;
+
+                // 换行时稍微停顿
+                const delay = char === '\n' ? typingSpeed * 3 : typingSpeed;
+                setTimeout(typeNextChar, delay);
+            } else {
+                // 打字完成，移除光标
+                bubble.innerHTML = bubble.innerHTML.replace('<span class="typing-cursor"></span>', '');
+                isTyping = false;
+                elements.submitBtn.disabled = false;
+                elements.submitBtn.style.opacity = '1';
+            }
+        }
+
+        // 稍微延迟后开始打字（模拟思考）
+        setTimeout(typeNextChar, 500);
+    }
+
+    /**
+     * HTML转义
+     */
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     /**
